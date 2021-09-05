@@ -13,13 +13,19 @@ class ClientChannel(Channel):
         self.Send({"action":"connected"})
 
     def Network_usernameEntered(self, data):
+        if myserver.queue is not None:
+            if self in myserver.queue.players:
+                myserver.clientsConnected[myserver.clientsConnected.index(self.username)] = data["username"]
         self.username = data["username"]
+        for player in myserver.queue.players:
+            player.Send({"action":"playerConnected", "playersconnected":myserver.clientsConnected})
+
 
     def Network_startSearch(self, data):
         self._server.matchmaking(self)
 
-    def Network_ready(self, data):
-        self._server.ready(self)
+    def Network_toggleReady(self, data):
+        self._server.toggle_ready(self, data["ready"])
 
     def Network_changeDirection(self, data):
         self._server.changeDirection(self.num, self.gameid, data["dir"])
@@ -33,20 +39,19 @@ class ClientChannel(Channel):
                 game.remainingPlayers.remove(self.num)
             except: pass
         # if user in queue, decrement connected/readied players
-        if myserver.queue != None:
+        if myserver.queue is not None:
             if self in myserver.queue.players:
                 if self in myserver.clientsReady: # if player is readied
                     myserver.clientsReady.remove(self) # remove from ready list
-                myserver.clientsConnected -= 1
+                myserver.clientsConnected.remove(self.username)
                 myserver.queue.players.remove(self)
                 for player in myserver.queue.players: # refresh other clients' vars
                     player.Send({"action":"playerConnected", "playersconnected":myserver.clientsConnected})
                     player.Send({"action":"playerReady", "playersReady":len(myserver.clientsReady)})
-                if myserver.clientsConnected == 0: # if player was the only one in queue
+                if not myserver.clientsConnected: # if player was the only one in queue
                     print('Queue has been reset.')
                     myserver.queue = None
-                else: self._server.startGame() # else check if game can start now
-            
+
 
 class MyServer(Server):
     def __init__(self, *args, **kwargs):
@@ -70,35 +75,35 @@ class MyServer(Server):
         if self.queue == None: # if no one is searching for a match
             self.currentIndex += 1
             self.queue = Game(self.currentIndex, [client]) # add new game instance to queue
-            self.clientsConnected = 1
+            if client.username is None:
+                client.username = "Player 1"
+            client.num = 1
+            self.clientsConnected = [client.username]
             self.clientsReady = []
-            print('Game instance with game ID #' + str(self.queue.gameid) + ' has been initialized.')
+            client.Send({"action":"playerConnected", "playersconnected":self.clientsConnected})
+            print(f'Game instance with game ID # {self.queue.gameid} has been initialized.')
         else: # if someone is in queue
-            self.clientsConnected += 1
+            client.num = len(self.clientsConnected)+1
+            if client.username is None:
+                client.username = f"Player {client.num}"
+            self.clientsConnected.append(client.username)
             self.queue.players.append(client) # put client in players list
             for player in self.queue.players:
                 player.Send({"action":"playerConnected", "playersconnected":self.clientsConnected})
                 player.Send({"action":"playerReady", "playersReady":len(self.clientsReady)})
-            self.startGame()
 
-    def ready(self, client):
-        if client not in self.clientsReady:
+    def toggle_ready(self, client, ready):
+        if ready and client not in self.clientsReady:
             self.clientsReady.append(client)
-            for player in self.queue.players:
-                player.Send({"action":"playerReady", "playersReady":len(self.clientsReady)})
-            self.startGame()
-
-    def unready(self, client):
-        if client in self.clientsReady:
+        elif not ready and client in self.clientsReady:
             self.clientsReady.remove(client)
-            for player in self.queue.players:
-                player.Send({"action":"playerReady", "playersReady":len(self.clientsReady)})
+        for player in self.queue.players:
+            player.Send({"action":"playerReady", "playersReady":len(self.clientsReady)})
+        if (len(self.clientsReady) == len(self.queue.players) and len(self.clientsReady) > 1):
             self.startGame()
-
 
     def startGame(self):
         # start if everyone (>1 person) is ready
-        if (len(self.clientsReady) == len(self.queue.players) and len(self.clientsReady) > 1):
             i = 0
             for player in self.queue.players:
                 player.Send({"action":"startgame"})
@@ -106,7 +111,7 @@ class MyServer(Server):
                 i += 1
             self.queue.initGame()
             self.games.append(self.queue)
-            print('Game #' + str(self.queue.gameid) + ' has started with ' + str(len(self.queue.players)) + ' players.')
+            print(f'Game # {self.queue.gameid} has started with {len(self.queue.players)} players.')
             self.queue = None
 
     def changeDirection(self, num, gameid, direction):
@@ -164,13 +169,15 @@ class Game:
                     # send clients elimination data 
                 if len(self.remainingPlayers) == 1:
                     self.winner = self.remainingPlayers[0]
-                    self.tempnum = self.winner.num
-                    if self.winner.username != None: self.winner = self.winner.username
-                    else: self.winner = self.winner.num
+                    self.winner_num = self.winner.num
+                    if self.winner.username is not None:
+                        self.winner = self.winner.username
+                    else:
+                        self.winner = self.winner.num
                     for player in self.players:
-                        player.Send({"action":"endofgame", "winner":self.winner, "playernum":self.tempnum})
+                        player.Send({"action":"endofgame", "winner":self.winner, "playernum":self.winner_num})
                     myserver.games.remove(self) # dereference game instance
-                    print('Game #' + str(self.gameid) + ' has ended.')
+                    print(f'Game # {self.gameid} has ended.')
                     break
 
         for user in self.players: # for each user in game

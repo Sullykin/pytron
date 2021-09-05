@@ -3,8 +3,14 @@ from PodSixNet.Connection import ConnectionListener, connection
 
 # eliminations
 # cancel search button
-# unready
 # add 'matchmaking' text
+
+# Changelog
+    # change 'ready' action to toggle
+
+# add powers
+    # Virtual Matter- Pixels of that player's color randomly spawn and despawn
+        # in a radius around them; can only kill opponents if hit in the head.
 
 pygame.init()
 WHITE = (255,255,255)
@@ -29,10 +35,10 @@ class Checkbox:
                 if game.searching:
                     if self.checkmark:
                         game.buttons[0].color = (0,200,0)
-                        game.Send({"action":"ready"})
+                        game.Send({"action":"toggleReady", "ready": True})
                     else:
                         game.buttons[0].color = (200,0,0)
-                        game.Send({"action":"unready"})
+                        game.Send({"action":"toggleReady", "ready": False})
  
     def draw(self, screen):
         pygame.draw.rect(screen, self.color, (self.x, self.y, 40, 40))
@@ -112,10 +118,10 @@ class Button(pygame.sprite.Sprite):
                     game.checkbox.checkmark = not game.checkbox.checkmark
                     if game.checkbox.checkmark:
                         game.buttons[0].color = (0,200,0)
-                        game.Send({"action":"ready"})
+                        game.Send({"action":"toggleReady", "ready": True})
                     else:
                         game.buttons[0].color = (200,0,0)
-                        game.Send({"action":"unready"})
+                        game.Send({"action":"toggleReady", "ready": False})
         else:
             self.showBorder = False
             self.soundFlag = True
@@ -131,7 +137,7 @@ class Game(ConnectionListener):
         # initialize pygame
         width, height = 1200, 700
         self.screen = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Tron")
+        pygame.display.set_caption("Pytron")
         self.clock = pygame.time.Clock()
         self.colors = [(255,0,0), (0,255,0), (0,0,255), (0,255,255)]
         self.username = None
@@ -159,7 +165,8 @@ class Game(ConnectionListener):
     def Network_endofgame(self, data):
         self.winner = data["winner"]
         self.winnerNum = data["playernum"]
-        if type(self.winner) == int: self.winner = 'Player ' + str(self.winner+1)
+        if isinstance(self.winner, int):
+            self.winner = 'Player ' + str(self.winner+1)
         self.running = False
 
     def Network_lobbyClosed(self, data):
@@ -167,12 +174,13 @@ class Game(ConnectionListener):
         
 
     def mainmenu(self):
+        self.username = None
         self.startgame = False
-        self.connected=False
+        self.connected = False
         self.waitingToConnect = False
         self.framecount = 0
         self.timeout = 0
-        self.playersConnected = 1
+        self.playersConnected = []
         self.searching = False
         self.playersReady = 0
         self.playerPositions = {}
@@ -198,7 +206,8 @@ class Game(ConnectionListener):
                 self.waitingToConnect = False
                 try:
                     self.Send({"action":"ruThere"})
-                except: pass
+                except Exception as e:
+                    print(e)
                 self.timeout += 1
                 if self.timeout >= 2:
                     self.searching = False
@@ -241,14 +250,20 @@ class Game(ConnectionListener):
             for button in self.buttons:
                 button.draw()
             drawText('Username:', 20, 1200-340, 700-43)
-            if self.username != None: drawText(self.username, 20, 1200-220, 700-43, (0,255,255))
-            else: self.box.draw(self.screen)
-            if self.connected: drawText('Connected to server', 20, 15, 15)
-            else: drawText('Not connected to server', 20, 15, 15)
+            if self.username is not None:
+                drawText(self.username, 20, 1200-220, 700-43, (0,255,255))
+            else:
+                self.box.draw(self.screen)
+            if self.connected:
+                drawText('Connected to server', 20, 15, 15)
+            else:
+                drawText('Not connected to server', 20, 15, 15)
             if self.searching:
                 self.checkbox.draw(self.screen)
-                drawText('Players connected: ' + str(self.playersConnected), 20, 15, 675)
-                drawText('Players ready: ' + str(self.playersReady), 20, 15, 655)
+                drawText('Players connected: ', 20, 15, 225)
+                for i, player in enumerate(self.playersConnected):
+                    drawText(f'{player}', 20, 15, 250+(i*25), self.colors[i])
+                drawText(f'Players ready: {self.playersReady}', 20, 15, 655)
 
             # pump connection (if there is one)
             self.Pump()
@@ -352,10 +367,12 @@ def drawText(text, size, x, y, color=WHITE, center=False):
     text = font.render(text, True, color)
     if center:
         game.screen.blit(text, (x - (text.get_width() // 2), y - (text.get_height() // 2)))
-    else: game.screen.blit(text, (x, y))
+    else:
+        game.screen.blit(text, (x, y))
 
-game = Game()
-while True:
-    game.mainmenu()
-    game.mainGameLoop()
-    game.gameOver()
+if __name__ == "__main__":
+    game = Game()
+    while True:
+        game.mainmenu()
+        game.mainGameLoop()
+        game.gameOver()
