@@ -16,9 +16,10 @@ class ClientChannel(Channel):
         if myserver.queue is not None:
             if self in myserver.queue.players:
                 myserver.clientsConnected[myserver.clientsConnected.index(self.username)] = data["username"]
+                self.username = data["username"]
+                for player in myserver.queue.players:
+                    player.Send({"action":"playerConnected", "playersconnected":myserver.clientsConnected})
         self.username = data["username"]
-        for player in myserver.queue.players:
-            player.Send({"action":"playerConnected", "playersconnected":myserver.clientsConnected})
 
 
     def Network_startSearch(self, data):
@@ -126,6 +127,8 @@ class Game:
         self.gameid = gameid
         self.paths = []
         self.remainingPlayers = []
+        self.framecount = 0
+        self.match_timer = 0
 
     def initGame(self):
         for player in self.players:
@@ -150,22 +153,28 @@ class Game:
                 elif player.y >= 700: player.y = 0
                 if player.x <= 0: player.x = 1190
                 elif player.x >= 1200: player.x = 10
-                
-                # move
-                self.paths.append((player.x,player.y))
-                if player.direction == 'up':
-                    player.y -= 5
-                elif player.direction == 'down':
-                    player.y += 5
-                elif player.direction == 'left':
-                    player.x -= 5
-                elif player.direction == 'right':
-                    player.x += 5
 
-                # elimination/end of game
-                if (player.x,player.y) in self.paths:
-                    player.hitTrail = True
-                    self.remainingPlayers.remove(player)
+                if self.framecount > 180:
+                    # move
+                    self.paths.append((player.x,player.y))
+                    if player.direction == 'up':
+                        player.y -= 5
+                    elif player.direction == 'down':
+                        player.y += 5
+                    elif player.direction == 'left':
+                        player.x -= 5
+                    elif player.direction == 'right':
+                        player.x += 5
+
+                    # elimination/end of game
+                    if (player.x,player.y) in self.paths:
+                        player.hitTrail = True
+                        self.remainingPlayers.remove(player)
+                if self.framecount % 60 == 0 and self.framecount // 60 < 4:
+                    player.Send({"action":"updateTimer", "timer":3-self.framecount // 60})
+                else:
+                    player.Send({"action":"updateTimer", "timer":None})
+
                     # send clients elimination data 
                 if len(self.remainingPlayers) == 1:
                     self.winner = self.remainingPlayers[0]
@@ -183,7 +192,7 @@ class Game:
         for user in self.players: # for each user in game
             for player in self.players: # send every players info
                 user.Send({"action":"playerPositions", "playernum":player.num, "playerx":player.x, "playery":player.y, "playerdir":player.direction})
-            
+        self.framecount += 1
 
 myserver = MyServer(localaddr=('192.168.0.4', 8001))
 #myserver = MyServer(localaddr=('localhost', 8000))

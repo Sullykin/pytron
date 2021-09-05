@@ -159,6 +159,9 @@ class Game(ConnectionListener):
     def Network_startgame(self, data):
         self.startgame = True
 
+    def Network_updateTimer(self, data):
+        self.timer = data["timer"]
+
     def Network_playerPositions(self, data):
         self.playerPositions[data["playernum"]] = (data["playerx"], data["playery"], data["playerdir"])
 
@@ -168,6 +171,7 @@ class Game(ConnectionListener):
         if isinstance(self.winner, int):
             self.winner = 'Player ' + str(self.winner+1)
         self.running = False
+        self.timer = 3
 
     def Network_lobbyClosed(self, data):
         print('A player has disconnected.')
@@ -191,7 +195,7 @@ class Game(ConnectionListener):
         direction = 4
         color = random.choice(self.colors)
         x,y = (20,350)
-        self.box = InputBox(1200-220, 700-50, 300, 32)
+        self.box = InputBox(130, 655, 300, 32)
         self.checkbox = Checkbox(675, 700-95)
         while not self.startgame:
             self.framecount += 1
@@ -249,9 +253,9 @@ class Game(ConnectionListener):
                 elif direction > 2: direction = random.randint(1,2)
             for button in self.buttons:
                 button.draw()
-            drawText('Username:', 20, 1200-340, 700-43)
+            drawText('Username:', 20, 15, 660)
             if self.username is not None:
-                drawText(self.username, 20, 1200-220, 700-43, (0,255,255))
+                drawText(self.username, 20, 130, 660, (0,255,255))
             else:
                 self.box.draw(self.screen)
             if self.connected:
@@ -263,7 +267,7 @@ class Game(ConnectionListener):
                 drawText('Players connected: ', 20, 15, 225)
                 for i, player in enumerate(self.playersConnected):
                     drawText(f'{player}', 20, 15, 250+(i*25), self.colors[i])
-                drawText(f'Players ready: {self.playersReady}', 20, 15, 655)
+                drawText(f'Players ready: {self.playersReady}', 20, 15, 625)
 
             # pump connection (if there is one)
             self.Pump()
@@ -283,16 +287,22 @@ class Game(ConnectionListener):
                     pygame.quit()
                     sys.exit()
 
-            # update player on server
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_w]:
-                self.Send({"action":"changeDirection", "dir":"up"})
-            elif keys[pygame.K_a]:
-                self.Send({"action":"changeDirection", "dir":"left"})
-            elif keys[pygame.K_s]:
-                self.Send({"action":"changeDirection", "dir":"down"})
-            elif keys[pygame.K_d]:
-                self.Send({"action":"changeDirection", "dir":"right"})
+            if self.timer is None:
+                # update player on server
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_w]:
+                    self.Send({"action":"changeDirection", "dir":"up"})
+                elif keys[pygame.K_a]:
+                    self.Send({"action":"changeDirection", "dir":"left"})
+                elif keys[pygame.K_s]:
+                    self.Send({"action":"changeDirection", "dir":"down"})
+                elif keys[pygame.K_d]:
+                    self.Send({"action":"changeDirection", "dir":"right"})
+            else:
+                self.screen.fill(0)
+                drawText(str(self.timer), 75, 1200//2, 700//2, center=True)
+                if self.timer == 0:
+                    self.screen.fill(0)
 
             # draw players and trails
             for playernum in self.playerPositions:
