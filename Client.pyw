@@ -4,6 +4,9 @@ from PodSixNet.Connection import ConnectionListener, connection
 # eliminations
 # cancel search button
 # add 'matchmaking' text
+# add utf-8 encoding to username input
+# add color selection // shop?
+# add score/leaderboard
 
 # Changelog
     # change 'ready' action to toggle

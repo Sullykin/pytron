@@ -2,6 +2,8 @@ import PodSixNet, time, pygame
 from time import sleep
 from PodSixNet.Channel import Channel
 from PodSixNet.Server import Server
+import urllib.request
+import socket
 
 # Recieve data from client
 class ClientChannel(Channel):
@@ -194,15 +196,28 @@ class Game:
                 user.Send({"action":"playerPositions", "playernum":player.num, "playerx":player.x, "playery":player.y, "playerdir":player.direction})
         self.framecount += 1
 
-myserver = MyServer(localaddr=('192.168.0.4', 8001))
-#myserver = MyServer(localaddr=('localhost', 8000))
-print('Server established. Listening for connections...')
-pygame.init()
-clock = pygame.time.Clock()
-while True:
-    #try:
-    for game in myserver.games:
-        game.mainLoop()
-    #except: pass
-    myserver.Pump()
-    clock.tick(60)
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
+if __name__ == "__main__":
+    external_ip = urllib.request.urlopen('https://ipv4bot.whatismyipaddress.com').read().decode('utf8')
+    print(f'Server address: {external_ip}')
+    print(f'Port 8001 must be forwarded to {get_ip()} in order to recieve connections.\n')
+    myserver = MyServer(localaddr=(get_ip(), 8001))
+    print('Server established. Listening for connections...')
+    pygame.init()
+    clock = pygame.time.Clock()
+    while True:
+        for game in myserver.games:
+            game.mainLoop()
+        myserver.Pump()
+        clock.tick(60)
